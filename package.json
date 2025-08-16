@@ -1,0 +1,27 @@
+{
+  "name": "nos-token-proxy",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon app.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.3.0",
+    "axios": "^1.11.0",
+    "dotenv": "^17.2.1",
+    "eventsource-parser": "^3.0.3",
+    "express": "^5.1.0",
+    "openai": "^5.12.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}
