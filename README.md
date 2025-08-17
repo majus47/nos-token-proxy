@@ -19,8 +19,44 @@ A high-performance OpenAI-compatible API proxy server with automatic API key rot
 - **💪 High Throughput**: Configurable payload limits up to 50MB
 - **🔧 TypeScript**: Fully typed with modular architecture
 - **🎯 Drop-in Replacement**: Compatible with OpenAI API format
+- **🐳 Docker Ready**: Easy deployment with Docker and Docker Compose
 
 ## 📦 Installation
+
+### 🚀 Quick Start with Docker (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/majus47/nos-token-proxy.git
+cd nos-token-proxy
+
+# Copy environment template
+cp .env.example .env
+
+# Configure your environment (see Configuration section)
+nano .env
+
+# Run with Docker Compose
+docker-compose up -d
+```
+
+### 🐳 Docker Only
+
+```bash
+# Build the image
+docker build -t nos-token-proxy .
+
+# Run the container
+docker run -d \
+  --name nos-proxy \
+  -p 4015:4015 \
+  -e TARGET_API_URL="https://api.openai.com/v1" \
+  -e API_KEYS="sk-key1,sk-key2,sk-key3" \
+  -e MODEL="z-ai/glm-4.5-air:free" \
+  nos-token-proxy
+```
+
+### 📋 Manual Installation
 
 ```bash
 # Clone the repository
@@ -74,12 +110,29 @@ API_KEY=your-single-api-key
 
 ## 🏁 Getting Started
 
+### 🐳 Docker (Recommended)
+
+```bash
+# Start with Docker Compose
+docker-compose up -d
+
+# Check logs
+docker-compose logs -f
+
+# Stop the service
+docker-compose down
+```
+
+### 📋 Manual Start
+
 ```bash
 # Start the server
 npm run start
 
 # Server will be running at http://localhost:4015
 ```
+
+**Server will be running at http://localhost:4015**
 
 ### Example Usage
 
@@ -157,6 +210,8 @@ Using API key 1/4 (rotated) # Cycles back to first key
 
 ## 🛠️ Development
 
+### 📋 Local Development
+
 ```bash
 # Install dependencies
 npm install
@@ -169,6 +224,47 @@ npm run build
 
 # Run linting
 npm run lint
+```
+
+### 🐳 Docker Development
+
+```bash
+# Build development image
+docker build -t nos-token-proxy:dev .
+
+# Run with volume mounting for live changes
+docker run -d \
+  --name nos-proxy-dev \
+  -p 4015:4015 \
+  -v $(pwd):/app \
+  -v /app/node_modules \
+  nos-token-proxy:dev
+```
+
+## 🐳 Docker Commands
+
+```bash
+# Build image
+docker build -t nos-token-proxy .
+
+# Run container
+docker run -d --name nos-proxy -p 4015:4015 nos-token-proxy
+
+# View logs
+docker logs nos-proxy
+
+# Stop container
+docker stop nos-proxy
+
+# Remove container
+docker rm nos-proxy
+
+# Docker Compose
+docker-compose up -d          # Start services
+docker-compose down           # Stop services  
+docker-compose logs -f        # View logs
+docker-compose ps             # Check status
+docker-compose restart       # Restart services
 ```
 
 ## 🐛 Troubleshooting
@@ -189,6 +285,24 @@ The proxy includes comprehensive CORS handling. If you still encounter CORS issu
 
 Ensure your client properly handles Server-Sent Events (SSE) and that the `stream: true` parameter is included in your request body.
 
+### Docker Issues
+
+If you encounter Docker-related problems:
+
+```bash
+# Check container status
+docker ps -a
+
+# View container logs
+docker logs nos-proxy
+
+# Restart container
+docker restart nos-proxy
+
+# Rebuild image
+docker build --no-cache -t nos-token-proxy .
+```
+
 ## 📝 API Endpoints
 
 | Endpoint | Method | Description |
@@ -204,6 +318,7 @@ Ensure your client properly handles Server-Sent Events (SSE) and that the `strea
 2. **Enable Streaming**: Use `stream: true` for real-time responses
 3. **Monitor Logs**: Keep an eye on token usage to optimize costs
 4. **Load Balancing**: Run multiple proxy instances behind a load balancer for high availability
+5. **Docker Deployment**: Use Docker for consistent deployments across environments
 
 ## 📄 License
 
