@@ -21,7 +21,7 @@ let currentKeyIndex = 0;
 function getNextApiKey(): string {
   const key = API_KEYS[currentKeyIndex];
   currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
-  console.log(`Using API key ${currentKeyIndex}/${API_KEYS.length} (rotated)`);
+  console.log(`Using API key ${currentKeyIndex+1}/${API_KEYS.length} (rotated)`);
   return key;
 }
 // Apply middleware
