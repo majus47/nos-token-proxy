@@ -25,19 +25,32 @@ A high-performance OpenAI-compatible API proxy server with automatic API key rot
 - **🧠 Smart Format Detection**: Auto-detects client API format and maps to target format
 - **🔒 Robust Error Handling**: Graceful handling of HTML errors and malformed responses
 
-## CLAUDE CODE COMPATIBLE WITH THE FOLLOWING
+## CLAUDE CODE compatible with the following
 
 ```bash
 # Copy environment template
 cp .env.example .env
 
-# For openai compatible target url add '/api' suffix for TARGET_API_URL e.g.: https://openrouter.ai --> https://openrouter.ai/api
-sed -i 's|^TARGET_API_URL=.*|TARGET_API_URL=https://openrouter.ai/api|' .env
+# Edit .env to set the enviroment variables
+#
+# IMPORTANT: if you want to connect claude code to
+# an openai compatible interface please add '/api'
+# to the end of your TARGET_API_URL string
+#
+# e.g.: https://openrouter.ai --> https://openrouter.ai/api
+# 
+# TARGET_API_URL=https://openrouter.ai/api
+nano .env
 
 # Set environment variable for claude to use nos-token-proxy
 export ANTHROPIC_BASE_URL=http://localhost:4015
 
-# Enjoy
+# Start claude code
+# IMPORTANT: change its config to a anthropic model with a context
+# window smaller or equal than the target model context window.
+# if you don't adjust that your vibe coding process will crash.
+#
+
 claude
 
 ```
