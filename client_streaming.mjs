@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 // Configure the OpenAI client to use your proxy
 const openai = new OpenAI({
   apiKey: 'your-api-key-here', // This will be replaced by your proxy
-  baseURL: 'http://localhost:4015/nos-proxy', // Your proxy server URL
+  baseURL: 'http://localhost:4015', // Your proxy server URL
 });
 
 async function testStreaming() {

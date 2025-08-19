@@ -3,7 +3,7 @@ import axios from "axios";
 const main = async () => {
     return await axios({
         method: "POST",
-        url: "http://localhost:4015/nos-proxy/chat/completions",
+        url: "http://localhost:4015/chat/completions",
         headers: {
             authorization: `asd`,
         },

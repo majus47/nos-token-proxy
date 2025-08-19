@@ -20,6 +20,10 @@ A high-performance OpenAI-compatible API proxy server with automatic API key rot
 - **🔧 TypeScript**: Fully typed with modular architecture
 - **🎯 Drop-in Replacement**: Compatible with OpenAI API format
 - **🐳 Docker Ready**: Easy deployment with Docker and Docker Compose
+- **🔄 API Format Mapping**: Automatic conversion between OpenAI and Anthropic API formats
+- **🛠️ Tool Calling Support**: Full function/tool calling with bi-directional conversion
+- **🧠 Smart Format Detection**: Auto-detects client API format and maps to target format
+- **🔒 Robust Error Handling**: Graceful handling of HTML errors and malformed responses
 
 ## 📦 Installation
 
@@ -89,6 +93,9 @@ MODEL=z-ai/glm-4.5-air:free
 
 # Server port (default: 4015)
 PORT=4015
+
+# Target API format (openai|anthropic) - optional, defaults to client format
+# TARGET_API_FORMAT=openai
 ```
 
 ### Environment Variables
@@ -99,6 +106,7 @@ PORT=4015
 | `API_KEYS` | ✅ | Comma-separated list of API keys for rotation | - |
 | `MODEL` | ✅ | Default model identifier | - |
 | `PORT` | ❌ | Server port number | `4015` |
+| `TARGET_API_FORMAT` | ❌ | Target API format (openai\|anthropic) | Auto-detected from client |
 
 ### Alternative Single Key Setup
 
@@ -129,31 +137,19 @@ docker-compose down
 # Start the server
 npm run start
 
-# Server will be running at http://localhost:4015
+# Start in development mode
+npm run dev
 ```
 
 **Server will be running at http://localhost:4015**
 
 ### Example Usage
 
-Replace your OpenAI API calls with the proxy:
+Replace your OpenAI or Anthropic API calls with the proxy:
 
 ```javascript
-// Before
-const response = await fetch('https://api.openai.com/v1/chat/completions', {
-  method: 'POST',
-  headers: {
-    'Authorization': 'Bearer YOUR_API_KEY',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    model: 'gpt-4',
-    messages: [...]
-  })
-});
-
-// After
-const response = await fetch('http://localhost:4015/nos-proxy/chat/completions', {
+// OpenAI Format
+const response = await fetch('http://localhost:4015/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json'
@@ -161,10 +157,85 @@ const response = await fetch('http://localhost:4015/nos-proxy/chat/completions',
   },
   body: JSON.stringify({
     model: 'gpt-4', // Will be automatically replaced with your configured model
-    messages: [...],
-    stream: true // Streaming supported!
+    messages: [
+      {role: 'system', content: 'You are helpful'},
+      {role: 'user', content: 'Hello!'}
+    ],
+    tools: [
+      {
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Get current weather',
+          parameters: {
+            type: 'object',
+            properties: {
+              location: {type: 'string'}
+            }
+          }
+        }
+      }
+    ],
+    stream: true
   })
 });
+
+// Anthropic Format  
+const response = await fetch('http://localhost:4015/v1/messages', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    model: 'claude-3-sonnet',
+    max_tokens: 1024,
+    system: 'You are helpful',
+    messages: [
+      {role: 'user', content: 'Hello!'}
+    ],
+    tools: [
+      {
+        name: 'get_weather',
+        description: 'Get current weather',
+        input_schema: {
+          type: 'object',
+          properties: {
+            location: {type: 'string'}
+          }
+        }
+      }
+    ]
+  })
+});
+```
+
+## 🔄 API Format Mapping
+
+The proxy automatically detects and converts between API formats:
+
+### **Automatic Detection**
+- **Client sends OpenAI format** (`/v1/chat/completions`) → Auto-detected
+- **Client sends Anthropic format** (`/v1/messages`) → Auto-detected  
+- **Target format** configured via `TARGET_API_FORMAT` environment variable
+
+### **Supported Conversions**
+- ✅ **OpenAI ↔ Anthropic** message formats
+- ✅ **Tool/function calling** conversion
+- ✅ **System prompts** handling
+- ✅ **Streaming responses** conversion
+- ✅ **Token usage** normalization
+
+### **Example Scenarios**
+```bash
+# Client sends Anthropic → Target expects OpenAI
+curl -X POST http://localhost:4015/v1/messages \
+  -d '{"model":"claude","max_tokens":100,"messages":[...]}'
+# Automatically converted to OpenAI chat/completions format
+
+# Client sends OpenAI → Target expects Anthropic  
+curl -X POST http://localhost:4015/v1/chat/completions \
+  -d '{"model":"gpt-4","messages":[...]}'
+# Automatically converted to Anthropic messages format
 ```
 
 ## 🏗️ Architecture
@@ -173,7 +244,8 @@ const response = await fetch('http://localhost:4015/nos-proxy/chat/completions',
 src/
 ├── app.ts                 # Main application entry point
 ├── types/
-│   └── index.ts          # TypeScript interfaces
+│   ├── index.ts          # Main TypeScript interfaces
+│   └── api.ts            # API format type definitions
 ├── middleware/
 │   └── cors.ts           # CORS handling
 ├── services/
@@ -182,7 +254,9 @@ src/
 ├── routes/
 │   └── proxy.ts          # Main proxy route handler
 ├── utils/
-│   └── tokenUsage.ts     # Token usage extraction and logging
+│   ├── tokenUsage.ts     # Token usage extraction and logging
+│   ├── formatDetector.ts # API format detection logic
+│   └── apiMapper.ts      # API format conversion logic
 └── config/
     └── server.ts         # Server configuration
 ```
@@ -285,6 +359,23 @@ The proxy includes comprehensive CORS handling. If you still encounter CORS issu
 
 Ensure your client properly handles Server-Sent Events (SSE) and that the `stream: true` parameter is included in your request body.
 
+### API Format Mapping Issues
+
+If you experience issues with format conversion:
+
+```bash
+# Check if TARGET_API_FORMAT is set correctly
+echo $TARGET_API_FORMAT
+
+# Enable debug logging to see format detection
+docker-compose logs -f nos-proxy | grep "Request mapping"
+
+# Test format detection manually
+curl -X POST http://localhost:4015/v1/messages \
+  -H "Content-Type: application/json" \
+  -d '{"model":"test","max_tokens":10,"messages":[{"role":"user","content":"test"}]}'
+```
+
 ### Docker Issues
 
 If you encounter Docker-related problems:
@@ -307,10 +398,27 @@ docker build --no-cache -t nos-token-proxy .
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/nos-proxy/*` | `ALL` | Proxy any OpenAI-compatible endpoint |
-| `/nos-proxy/chat/completions` | `POST` | Chat completions (most common) |
-| `/nos-proxy/completions` | `POST` | Text completions |
-| `/nos-proxy/embeddings` | `POST` | Text embeddings |
+| `/v1/chat/completions` | `POST` | OpenAI chat completions |
+| `/v1/messages` | `POST` | Anthropic messages |
+| `/*` | `ALL` | Proxy any OpenAI-compatible endpoint |
+
+### Supported Features per Endpoint
+
+| Feature | `/chat/completions` | `/messages` |
+|---------|:------------------:|:-----------:|
+| Text Generation | ✅ | ✅ |
+| Tool Calling | ✅ | ✅ | 
+| Streaming | ✅ | ✅ |
+| Format Conversion | ✅ | ✅ |
+| Token Tracking | ✅ | ✅ | 
+
+### Utility Endpoints
+| Feature | `/v1/embeddings` |
+|---------|:------------------:|
+| Vector Generation | ✅ |
+| Batch Porcessing | ✅ |
+| Token Tracking | ✅ |
+| Pass-through | ✅ |
 
 ## 🚦 Performance Tips
 
@@ -319,6 +427,7 @@ docker build --no-cache -t nos-token-proxy .
 3. **Monitor Logs**: Keep an eye on token usage to optimize costs
 4. **Load Balancing**: Run multiple proxy instances behind a load balancer for high availability
 5. **Docker Deployment**: Use Docker for consistent deployments across environments
+6. **API Format Flexibility**: Use any client format with any target API through automatic conversion
 
 ## 📄 License
 
