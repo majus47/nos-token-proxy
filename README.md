@@ -25,6 +25,23 @@ A high-performance OpenAI-compatible API proxy server with automatic API key rot
 - **🧠 Smart Format Detection**: Auto-detects client API format and maps to target format
 - **🔒 Robust Error Handling**: Graceful handling of HTML errors and malformed responses
 
+## CLAUDE CODE COMPATIBLE WITH THE FOLLOWING
+
+```bash
+# Copy environment template
+cp .env.example .env
+
+# For openai compatible target url add '/api' suffix for TARGET_API_URL e.g.: https://openrouter.ai --> https://openrouter.ai/api
+sed -i 's|^TARGET_API_URL=.*|TARGET_API_URL=https://openrouter.ai/api|' .env
+
+# Set environment variable for claude to use nos-token-proxy
+export ANTHROPIC_BASE_URL=http://localhost:4015
+
+# Enjoy
+claude
+
+```
+
 ## 📦 Installation
 
 ### 🚀 Quick Start with Docker (Recommended)
