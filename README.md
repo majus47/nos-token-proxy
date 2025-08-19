@@ -1,4 +1,4 @@
-# 🚗💨 nos-token-proxy
+# 🏎️💨 nos-token-proxy
 
 <div align="center">
   <img src="./assets/logo.png" alt="NOS Token Proxy" width="300"/>
@@ -132,7 +132,7 @@ PORT=4015
 
 | Variable | Required | Description | Default |
 |----------|----------|-------------|---------|
-| `TARGET_API_URL` | ✅ | The target API endpoint | `https://api.openai.com/v1` |
+| `TARGET_API_URL` | ✅ | The target API [endpoint](#target_api_url) | `https://api.openai.com/v1` |
 | `API_KEYS` | ✅ | Comma-separated list of API keys for rotation | - |
 | `MODEL` | ✅ | Default model identifier | - |
 | `PORT` | ❌ | Server port number | `4015` |
@@ -321,13 +321,10 @@ Using API key 1/4 (rotated) # Cycles back to first key
 npm install
 
 # Start development server with hot reload
-npm run dev
+npm run start
 
 # Build for production
 npm run build
-
-# Run linting
-npm run lint
 ```
 
 ### 🐳 Docker Development
@@ -372,6 +369,17 @@ docker-compose restart       # Restart services
 ```
 
 ## 🐛 Troubleshooting
+
+### TARGET_API_URL
+
+If you receive 404 errors, the issue might be an incorrect `TARGET_API_URL`. To verify your configuration:
+
+1. **Check the proxy console output** - it displays the target URL that requests are being redirected to
+2. **Verify the endpoint path** - depending on your client and proxy configuration, you may need to append specific routes to the URL (e.g., `/api/v1`)
+
+**Common examples:**
+- OpenAI-compatible APIs often require `/api` suffix: `https://openrouter.ai/api`
+- Some services need version paths: `https://api.example.com/v1`
 
 ### PayloadTooLargeError
 
