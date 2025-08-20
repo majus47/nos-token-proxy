@@ -128,6 +128,168 @@ export class APIMapper {
     return originalUrl;
   }
 
+  // Validates and fixes OpenAI message arrays to ensure proper tool call/response pairing
+  private static validateAndFixOpenAIMessages(messages: OpenAIMessage[]): OpenAIMessage[] {
+    const fixedMessages: OpenAIMessage[] = [];
+    
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i];
+      
+      // Handle orphaned tool messages (tool messages without preceding tool calls)
+      if (message.role === "tool") {
+        // Check if previous message has matching tool call
+        const prevMessage = fixedMessages[fixedMessages.length - 1];
+        let hasMatchingToolCall = false;
+        
+        if (prevMessage?.role === "assistant" && prevMessage.tool_calls) {
+          hasMatchingToolCall = prevMessage.tool_calls.some(tc => tc.id === message.tool_call_id);
+        }
+        
+        if (!hasMatchingToolCall) {
+          // Create a synthetic assistant message with the missing tool call
+          const toolName = message.name || "unknown_tool";
+          fixedMessages.push({
+            role: "assistant",
+            content: null,
+            tool_calls: [{
+              id: message.tool_call_id || `synthetic_${Date.now()}`,
+              type: "function" as const,
+              function: {
+                name: toolName,
+                arguments: "{}",
+              },
+            }],
+          });
+        }
+        
+        fixedMessages.push(message);
+        continue;
+      }
+      
+      fixedMessages.push(message);
+      
+      // If this is an assistant message with tool calls
+      if (message.role === "assistant" && message.tool_calls && message.tool_calls.length > 0) {
+        const expectedToolCallIds = new Set(message.tool_calls.map(tc => tc.id));
+        const foundToolCallIds = new Set<string>();
+        
+        // Look ahead to find corresponding tool messages
+        let j = i + 1;
+        while (j < messages.length && messages[j].role === "tool") {
+          const toolMsg = messages[j];
+          if (toolMsg.tool_call_id && expectedToolCallIds.has(toolMsg.tool_call_id)) {
+            foundToolCallIds.add(toolMsg.tool_call_id);
+            fixedMessages.push(toolMsg);
+          }
+          j++;
+        }
+        
+        // Add placeholder tool responses for missing tool calls
+        for (const toolCall of message.tool_calls) {
+          if (!foundToolCallIds.has(toolCall.id)) {
+            fixedMessages.push({
+              role: "tool",
+              content: `Tool call completed: ${toolCall.function.name}`,
+              tool_call_id: toolCall.id,
+              name: toolCall.function.name,
+            });
+          }
+        }
+        
+        // Skip the tool messages we already processed
+        i = j - 1;
+      }
+    }
+    
+    return fixedMessages;
+  }
+
+  // Validates and fixes Anthropic message arrays
+  private static validateAndFixAnthropicMessages(messages: AnthropicMessage[]): AnthropicMessage[] {
+    const fixedMessages: AnthropicMessage[] = [];
+    
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i];
+      
+      // If this is an assistant message, check for tool uses
+      if (message.role === "assistant") {
+        const toolUses: any[] = [];
+        let hasText = false;
+        
+        if (Array.isArray(message.content)) {
+          for (const block of message.content) {
+            if (block.type === "tool_use") {
+              toolUses.push(block);
+            } else if (block.type === "text") {
+              hasText = true;
+            }
+          }
+        }
+        
+        fixedMessages.push(message);
+        
+        // If there are tool uses, ensure there's a following user message with tool results
+        if (toolUses.length > 0) {
+          const nextMessage = i + 1 < messages.length ? messages[i + 1] : null;
+          let hasToolResults = false;
+          
+          if (nextMessage && nextMessage.role === "user" && Array.isArray(nextMessage.content)) {
+            const toolResultIds = new Set();
+            for (const block of nextMessage.content) {
+              if (block.type === "tool_result") {
+                toolResultIds.add(block.tool_use_id);
+                hasToolResults = true;
+              }
+            }
+            
+            // Check if all tool uses have corresponding results
+            const missingResults = toolUses.filter(tu => !toolResultIds.has(tu.id));
+            
+            if (missingResults.length > 0) {
+              // Add missing tool results to the next user message
+              const updatedContent = [...nextMessage.content];
+              for (const toolUse of missingResults) {
+                updatedContent.push({
+                  type: "tool_result" as const,
+                  tool_use_id: toolUse.id,
+                  content: `Tool executed: ${toolUse.name}`,
+                });
+              }
+              
+              fixedMessages.push({
+                ...nextMessage,
+                content: updatedContent,
+              });
+              i++; // Skip the original next message
+            }
+          } else if (!hasToolResults) {
+            // No following user message with tool results, create one
+            const toolResults = toolUses.map(toolUse => ({
+              type: "tool_result" as const,
+              tool_use_id: toolUse.id,
+              content: `Tool executed: ${toolUse.name}`,
+            }));
+            
+            fixedMessages.push({
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: "Please continue.",
+                },
+                ...toolResults,
+              ],
+            });
+          }
+        }
+      } else {
+        fixedMessages.push(message);
+      }
+    }
+    
+    return fixedMessages;
+  }
+
   // Private mapping methods with tool calling support
   private static anthropicToOpenAI(
     anthropicReq: AnthropicRequest
@@ -135,91 +297,118 @@ export class APIMapper {
     const openAIMessages: OpenAIMessage[] = [];
 
     if (anthropicReq.system) {
+    // Handle both string and array formats
+      let systemContent: string = "";
+      if (typeof anthropicReq.system === 'string') {
+        systemContent = anthropicReq.system;
+      } else if (Array.isArray(anthropicReq.system)) {
+        systemContent = anthropicReq.system
+          .filter(block => block.type === 'text')
+          .map(block => block.text)
+          .join('');
+      }
+      
       openAIMessages.push({
-        role: "system",
-        content: anthropicReq.system,
+        role: 'system',
+        content: systemContent
       });
     }
 
-    for (const message of anthropicReq.messages) {
-      if (message.role === "user") {
-        let content: string;
-        let toolResults: any[] = [];
-
-        if (typeof message.content === "string") {
-          content = message.content;
-        } else if (Array.isArray(message.content)) {
-          // Separate text and tool results
-          const textBlocks = message.content.filter(
-            (block) => block.type === "text"
-          );
-          toolResults = message.content.filter(
-            (block) => block.type === "tool_result"
-          );
-
-          content = textBlocks.map((block) => block.text || "").join("");
-        } else {
-          content = "";
-        }
-
-        // Add user message
-        openAIMessages.push({
-          role: "user",
-          content,
-        });
-
-        // Add tool result messages
-        for (const toolResult of toolResults) {
-          openAIMessages.push({
-            role: "tool",
-            content: toolResult.content || "",
-            tool_call_id: toolResult.tool_use_id || "",
-            name: toolResult.name || "",
-          });
-        }
-      } else if (message.role === "assistant") {
-        let content = "";
-        let toolCalls: any[] = [];
-
-        if (typeof message.content === "string") {
-          content = message.content;
-        } else if (Array.isArray(message.content)) {
-          // Separate text and tool calls
-          const textBlocks = message.content.filter(
-            (block) => block.type === "text"
-          );
-          const toolUseBlocks = message.content.filter(
-            (block) => block.type === "tool_use"
-          );
-
-          content = textBlocks.map((block) => block.text || "").join("");
-
-          toolCalls = toolUseBlocks.map((block) => ({
-            id: block.id || "",
-            type: "function" as const,
-            function: {
-              name: block.name || "",
-              arguments: JSON.stringify(block.input || {}),
-            },
-          }));
-        }
-
-        const assistantMessage: OpenAIMessage = {
-          role: "assistant",
-          content: content || null,
-        };
-
-        if (toolCalls.length > 0) {
-          assistantMessage.tool_calls = toolCalls;
-        }
-
-        openAIMessages.push(assistantMessage);
-      }
+for (const message of anthropicReq.messages) {
+  if (message.role === "user") {
+    let content: string;
+    let toolResults: any[] = [];
+    
+    if (typeof message.content === "string") {
+      content = message.content;
+    } else if (Array.isArray(message.content)) {
+      // Separate text and tool results
+      const textBlocks = message.content.filter(
+        (block) => block.type === "text"
+      );
+      toolResults = message.content.filter(
+        (block) => block.type === "tool_result"
+      );
+      
+      content = textBlocks.map((block) => block.text || "").join("");
+    } else {
+      content = "";
     }
+
+    // Add user message
+    openAIMessages.push({
+      role: "user",
+      content,
+    });
+
+    // Add tool result messages
+    for (const toolResult of toolResults) {
+      // Handle complex tool result content
+      let toolContent: string;
+      if (typeof toolResult.content === "string") {
+        toolContent = toolResult.content;
+      } else if (Array.isArray(toolResult.content)) {
+        toolContent = toolResult.content
+          .filter((block: any) => block.type === "text")
+          .map((block: any) => block.text || "")
+          .join("");
+      } else {
+        toolContent = "";
+      }
+
+      openAIMessages.push({
+        role: "tool",
+        content: toolContent,
+        tool_call_id: toolResult.tool_use_id || "",
+        name: toolResult.name || "",
+      });
+    }
+  } else if (message.role === "assistant") {
+    let content = "";
+    let toolCalls: any[] = [];
+    
+    if (typeof message.content === "string") {
+      content = message.content;
+    } else if (Array.isArray(message.content)) {
+      // Separate text and tool calls
+      const textBlocks = message.content.filter(
+        (block) => block.type === "text"
+      );
+      const toolUseBlocks = message.content.filter(
+        (block) => block.type === "tool_use"
+      );
+      
+      content = textBlocks.map((block) => block.text || "").join("");
+      
+      toolCalls = toolUseBlocks.map((block) => ({
+        id: block.id || "",
+        type: "function" as const,
+        function: {
+          name: block.name || "",
+          arguments: JSON.stringify(block.input || {}),
+        },
+      }));
+    }
+
+    const assistantMessage: OpenAIMessage = {
+      role: "assistant",
+      content: content || null,
+    };
+
+    if (toolCalls.length > 0) {
+      assistantMessage.tool_calls = toolCalls;
+    }
+
+    openAIMessages.push(assistantMessage);
+  }
+}
+
+    // Validate and fix the message array
+    const validatedMessages = this.validateAndFixOpenAIMessages(openAIMessages);
 
     const result: OpenAIRequest = {
       model: anthropicReq.model,
-      messages: openAIMessages,
+      messages: validatedMessages,
       max_tokens: anthropicReq.max_tokens,
       stream: anthropicReq.stream,
     };
@@ -344,9 +533,12 @@ export class APIMapper {
       }
     }
 
+    // Validate and fix the message array
+    const validatedMessages = this.validateAndFixAnthropicMessages(anthropicMessages);
+
     const result: AnthropicRequest = {
       model: openAIReq.model,
-      messages: anthropicMessages,
+      messages: validatedMessages,
       max_tokens: openAIReq.max_tokens || 1024,
       stream: openAIReq.stream,
     };

@@ -6,33 +6,49 @@ export interface APIFormatContext {
   needsMapping: boolean;
 }
 
+export interface AnthropicTextBlock {
+  type: 'text';
+  text: string;
+}
+
+export interface AnthropicToolUseBlock {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input: any;
+}
+
+export interface AnthropicToolResultBlock {
+  type: 'tool_result';
+  tool_use_id: string;
+  content: string | Array<{
+    type: string;
+    text?: string;
+    [key: string]: any;
+  }>;
+  name?: string;
+}
+
+export type AnthropicContentBlock = AnthropicTextBlock | AnthropicToolUseBlock | AnthropicToolResultBlock;
+
 export interface AnthropicMessage {
-  role: "user" | "assistant";
-  content:
-    | string
-    | Array<{
-        type: "text" | "tool_use" | "tool_result";
-        text?: string;
-        id?: string;
-        name?: string;
-        input?: any;
-        tool_use_id?: string;
-        content?: string;
-        [key: string]: any;
-      }>;
+  role: 'user' | 'assistant';
+  content: string | AnthropicContentBlock[];
+}
+
+export interface OpenAIToolCall {
+  id: string;
+  type: "function";
+  function: {
+    name: string;
+    arguments: string;
+  };
 }
 
 export interface OpenAIMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string | null;
-  tool_calls?: Array<{
-    id: string;
-    type: "function";
-    function: {
-      name: string;
-      arguments: string;
-    };
-  }>;
+  tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;
   name?: string;
 }
@@ -60,17 +76,26 @@ export interface OpenAITool {
   };
 }
 
+export interface AnthropicSystemBlock {
+  type: string;
+  text?: string;
+  cache_control?: {
+    type: string;
+  };
+  [key: string]: any;
+}
+
 export interface AnthropicRequest {
   model: string;
   messages: AnthropicMessage[];
   max_tokens: number;
-  system?: string;
+  system?: string | AnthropicSystemBlock[];
   temperature?: number;
   top_p?: number;
   stream?: boolean;
   stop_sequences?: string[];
   tools?: AnthropicTool[];
-  tool_choice?: { type: "auto" | "any" | "tool"; name?: string };
+  tool_choice?: { type: 'auto' | 'any' | 'tool'; name?: string };
 }
 
 export interface OpenAIRequest {
@@ -89,17 +114,19 @@ export interface OpenAIRequest {
     | { type: "function"; function: { name: string } };
 }
 
+export interface AnthropicResponseContentBlock {
+  type: "text" | "tool_use";
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: any;
+}
+
 export interface AnthropicResponse {
   id: string;
   type: "message";
   role: "assistant";
-  content: Array<{
-    type: "text" | "tool_use";
-    text?: string;
-    id?: string;
-    name?: string;
-    input?: any;
-  }>;
+  content: AnthropicResponseContentBlock[];
   model: string;
   stop_reason: string | null;
   stop_sequence: string | null;
@@ -109,16 +136,18 @@ export interface AnthropicResponse {
   };
 }
 
+export interface OpenAIChoice {
+  index: number;
+  message: OpenAIMessage;
+  finish_reason: string | null;
+}
+
 export interface OpenAIResponse {
   id: string;
   object: "chat.completion";
   created: number;
   model: string;
-  choices: Array<{
-    index: number;
-    message: OpenAIMessage;
-    finish_reason: string | null;
-  }>;
+  choices: OpenAIChoice[];
   usage: {
     prompt_tokens: number;
     completion_tokens: number;
